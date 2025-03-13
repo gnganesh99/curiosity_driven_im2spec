@@ -9,6 +9,7 @@ from atomai.utils import get_coord_grid, extract_patches_and_spectra, extract_su
 
 def BEPS_image_spectral_pairs(beps_file_path, window_size = 16, step = 1):
 
+
     input_file = np.load(beps_file_path)
     
     image = input_file['image']
