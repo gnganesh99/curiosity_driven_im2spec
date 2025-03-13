@@ -7,7 +7,11 @@ import sklearn
 from sklearn.linear_model import LinearRegression
 
 # Documentation: https://github.com/hoffmanlabcoding/stmpy/blob/main/stmpy/doc/Stmpy%20101%20-%20getting%20started.ipynb
-import stmpy
+
+try:
+    import stmpy
+except ImportError:
+    print("stmpy not installed")
 
 class Sxm_Image():
     

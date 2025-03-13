@@ -8,7 +8,12 @@ import pandas as pd
 # Documentation: 
 #https://github.com/hoffmanlabcoding/stmpy/blob/main/stmpy/doc/Stmpy%20101%20-%20getting%20started.ipynb
 #https://github.com/hoffmanlabcoding/stmpy/blob/main/stmpy/doc/stmpy%20notebook%20template%20--%20topos%20and%20dos%20maps.ipynb
-import stmpy
+
+try:
+    import stmpy
+except ImportError:
+    print("hoffmanlabstmpy not installed")
+
 import re
 
 #import sklearn
