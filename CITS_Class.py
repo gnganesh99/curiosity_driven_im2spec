@@ -12,7 +12,7 @@ import pandas as pd
 try:
     import stmpy
 except ImportError:
-    print("hoffmanlabstmpy not installed")
+    pass
 
 import re
 

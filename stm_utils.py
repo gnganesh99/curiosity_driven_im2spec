@@ -11,7 +11,7 @@ from sklearn.linear_model import LinearRegression
 try:
     import stmpy
 except ImportError:
-    print("stmpy not installed")
+    pass
 
 class Sxm_Image():
     
