@@ -14,6 +14,9 @@ from atomai.nets.blocks import ConvBlock as conv_block
 from atomai.nets.blocks import DilatedBlock as dilated_block
 
 
+
+
+
 class im2spec(nn.Module):
     """
     Encoder (2D) - decoder (1D) type model for generating spectra from image
@@ -45,9 +48,12 @@ class im2spec(nn.Module):
         # Decoder params
         
         
-        #Wrap the encoder function into an `nn.Module`
-        self.encoder = nn.Module()
-        self.encoder.forward = lambda x: self._encoder(x)
+#         #Wrap the encoder function into an `nn.Module`
+#         self.encoder = nn.Module()
+#         self.encoder.forward = lambda x: self._encoder(x)
+        self.encoder = Encoder_Wrapper(self._encoder)
+        
+        
         
         self.dec_fc1 = nn.Linear(latent_dim, self.ts //4 )
         self.dec_fc2 = nn.Linear(self.ts // 4, self.ts //4 * 2 )
@@ -121,8 +127,9 @@ class im2spec_2(nn.Module):
         self.enc_fc = nn.Linear(self.e_filt * self.n * self.m, latent_dim)
         
         #Wrap the encoder function into an `nn.Module`
-        self.encoder = nn.Module()
-        self.encoder.forward = lambda x: self._encoder(x)
+#         self.encoder = nn.Module()
+#         self.encoder.forward = lambda x: self._encoder(x)
+        self.encoder = Encoder_Wrapper(self._encoder)
         
         
         
@@ -205,9 +212,10 @@ class im2spec_3(nn.Module):
         self.enc_fc = nn.Linear(self.e_filt * self.n * self.m, latent_dim)
         
         
-        #Wrap the encoder function into an `nn.Module`
-        self.encoder = nn.Module()
-        self.encoder.forward = lambda x: self._encoder(x)
+#         #Wrap the encoder function into an `nn.Module`
+#         self.encoder = nn.Module()
+#         self.encoder.forward = lambda x: self._encoder(x)
+        self.encoder = Encoder_Wrapper(self._encoder)
         
         
         
@@ -305,17 +313,21 @@ class im2spec_4(nn.Module):
         
         
         #Wrap the encoder function into an `nn.Module`
-        self.encoder = nn.Module()
-        self.encoder.forward = lambda x: self._encoder(x)
+#         self.encoder = nn.Module()
+#         self.encoder.forward = lambda x: self._encoder(x)
+        self.encoder = Encoder_Wrapper(self._encoder)
         
         
         
         
+           
         # Decoder params        
         self.dec_fc1 = nn.Linear(latent_dim, self.ts //4 )
-        self.dec_fc2 = nn.Linear(self.ts // 4, self.ts //4 * 2 )
-        self.dec_fc3 = nn.Linear(self.ts //4 * 2, self.ts //4 * 3 )
-        self.dec_fc4 = nn.Linear(self.ts //4 * 3, self.ts)
+        self.dec_fc2 = nn.Linear(self.ts // 4, self.ts //4 * 3 )
+        self.dropout2 = nn.Dropout(p = 0.3)
+        self.dec_fc3 = nn.Linear(self.ts //4 * 3, self.ts //4 * 2 )
+        self.dropout3 = nn.Dropout(p = 0.2)
+        self.dec_fc4 = nn.Linear(self.ts //4 * 2, self.ts)
         self.dec_fc5 = nn.Linear(self.ts, self.ts)
         
         
@@ -339,8 +351,8 @@ class im2spec_4(nn.Module):
         """
         #introduce non-linearity
         x = F.leaky_relu(self.dec_fc1(encoded), negative_slope=0.1)
-        x = F.relu(self.dec_fc2(x))
-        x = F.relu(self.dec_fc3(x))
+        x = F.relu(self.dropout2(self.dec_fc2(x)))
+        x = F.relu(self.dropout3(self.dec_fc3(x)))
         x = F.relu(self.dec_fc4(x))
         x = self.dec_fc5(x)
         
@@ -397,16 +409,21 @@ class im2spec_5(nn.Module):
         
         
         #Wrap the encoder function into an `nn.Module`
-        self.encoder = nn.Module()
-        self.encoder.forward = lambda x: self._encoder(x)
+#         self.encoder = nn.Module()
+#         self.encoder.forward = lambda x: self._encoder(x)
+        self.encoder = Encoder_Wrapper(self._encoder)
         
         
         
-        # Decoder params
+        # Decoder params        
         self.dec_fc1 = nn.Linear(latent_dim, self.ts //4 )
-        self.dec_fc2 = nn.Linear(self.ts // 4, self.ts //4 * 2 )
-        self.dec_fc3 = nn.Linear(self.ts //4 * 2, self.ts)
-        self.dec_fc4 = nn.Linear(self.ts, self.ts)        
+        self.dec_fc2 = nn.Linear(self.ts // 4, self.ts //4 * 3 )
+        self.dropout2 = nn.Dropout(p = 0.3)
+        self.dec_fc3 = nn.Linear(self.ts //4 * 3, self.ts //4 * 2 )
+        self.dropout3 = nn.Dropout(p = 0.2)
+        self.dec_fc4 = nn.Linear(self.ts //4 * 2, self.ts)
+        self.dec_fc5 = nn.Linear(self.ts, self.ts)
+            
         
        
     def _encoder(self, features: torch.Tensor) -> torch.Tensor:
@@ -428,9 +445,10 @@ class im2spec_5(nn.Module):
         """
         
         x = F.relu(self.dec_fc1(encoded))
-        x = F.relu(self.dec_fc2(x))
-        x = F.relu(self.dec_fc3(x))
+        x = F.relu(self.dropout2(self.dec_fc2(x)))
+        x = F.relu(self.dropout3(self.dec_fc3(x)))
         x = F.relu(self.dec_fc4(x))
+        x = F.relu(self.dec_fc5(x))
         
         
         return x.reshape(-1, self.ts)
@@ -481,8 +499,58 @@ class ensemble_im2spec(nn.Module):
     def to(self, device):
         
         [model.to(device) for model in self.models]
-        
 
+        
+        
+        
+        
+        
+        
+class Swa_Ensemble(nn.Module):
+
+    def __init__(self, model_list):
+        super().__init__()
+
+        self.models = model_list
+        
+    def forward(self, x):
+        pred = [model(x) for model in self.models]
+        return pred
+
+    def train(self):
+        [model.train() for model in self.models]
+    
+    def eval(self):
+        [model.eval() for model in self.models]
+
+    def predict(self, x):
+        
+        [model.eval() for model in self.models]
+
+        with torch.no_grad():
+        
+            return self.forward(x)
+    
+    def to(self, device):
+        
+        [model.to(device) for model in self.models]
+    
+    
+    
+class Encoder_Wrapper(nn.Module):
+    
+    def __init__(self, encoder_fn):
+        super().__init__()
+        
+        self.encoder_fn = encoder_fn
+        
+    def forward(self, x):
+    
+        return self.encoder_fn(x)
+    
+    
+    
+    
 # class error_model(nn.Module):
 
 #     def __init__(self, in_dim):
@@ -505,6 +573,9 @@ class ensemble_im2spec(nn.Module):
 #             param.data = param.data.to(device)
 #             if param.grad is not None:
 #                 param.grad.data = param.grad.data.to(device)
+
+
+
         
 class error_model(nn.Module):
     """

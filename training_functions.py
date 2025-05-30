@@ -12,7 +12,7 @@ from sklearn.model_selection import train_test_split
 
 from torch.utils.data import DataLoader, Dataset, random_split
 
-#from torch.optim.swa_utils import AveragedModel, SWALR, update_bn
+from torch.optim.swa_utils import AveragedModel, SWALR, update_bn
 from tqdm import tqdm
 
 from im2spec_models import *
@@ -222,13 +222,15 @@ class EarlyStopping_ensemble:
         self.val_loss[model_idx] = val_epoch_loss
         self.epoch_count[model_idx] += 1
         
-
-                
+       
     
 
 def train_model_ensemble(model, dataset, lr = [0.1, 0.1, 0.1, 0.1, 0.1], n_epochs = 100, patience = 10,n_batches =3, 
-                         l1_rglr = False, vae = False, beta_elbo = 0.1, weight_decay = 1e-6):
+                         l1_rglr = False, vae = False, beta_elbo = 0.1, weight_decay = 1e-6, swa = False, swa_epoch = 50, batchsize = None):
 
+    """
+    if batchsize is provided, n_batches is disregarded
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -238,7 +240,14 @@ def train_model_ensemble(model, dataset, lr = [0.1, 0.1, 0.1, 0.1, 0.1], n_epoch
     val_criterion  = nn.MSELoss()
     
     optimizers = [torch.optim.Adam(model.models[i].parameters(), lr=lr[i], weight_decay=weight_decay) for i in range(len(model.models))]
-
+    
+    
+    # SWA model wrapper
+    if swa:
+        swa_model_list = [AveragedModel(submodel) for submodel in model.models]
+        swa_model = Swa_Ensemble(swa_model_list)
+        
+    swa_triggered = False
     
 
     model.train()
@@ -254,6 +263,10 @@ def train_model_ensemble(model, dataset, lr = [0.1, 0.1, 0.1, 0.1, 0.1], n_epoch
     
     tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True)
     val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
+    
+    if batchsize is not None:
+        tr_dataloader = DataLoader(train_dataset, batch_size = batchsize, shuffle = True)
+        val_dataloader = DataLoader(val_dataset, batch_size = batchsize, shuffle = True)
 
     n_models = len(model.models)
     earlystopping = EarlyStopping_ensemble(patience = patience, min_delta = 0, n_models = n_models)
@@ -308,6 +321,13 @@ def train_model_ensemble(model, dataset, lr = [0.1, 0.1, 0.1, 0.1, 0.1], n_epoch
             
             train_loss[idx].append(tr_epoch_loss)
         
+            # Update swa_model
+            
+            if swa and epoch >= swa_epoch:
+                swa_model.models[idx].update_parameters(submodel)
+                swa_triggered = True
+            
+        
             # Validation
         
             submodel.eval()
@@ -334,13 +354,30 @@ def train_model_ensemble(model, dataset, lr = [0.1, 0.1, 0.1, 0.1, 0.1], n_epoch
             
     progress_bar.close()
     
-    model.eval()
+    
+    if swa_triggered:
+        
+        # Recompute BN and the update batch_stats.
+        for submodel in swa_model.models:
+            update_bn(tr_dataloader, submodel, device = device)
+            submodel.eval()
+            
+        model = swa_model
+        model.eval()
+        
+    else:
+        model.eval()
+        
+        
+    return model, train_loss, val_loss, swa_triggered
 
-    return model, train_loss, val_loss
 
+def train_error_ensemble(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, batchsize = None):
 
-def train_error_ensemble(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100):
-
+    """
+    if batchsize is provided, n_batches is disregarded
+    """
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -365,6 +402,10 @@ def train_error_ensemble(model, dataset, n_batches= 3, lr = 0.1, patience = 10, 
     
     tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True)
     val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
+    
+    if batchsize is not None:
+        tr_dataloader = DataLoader(train_dataset, batch_size = batchsize, shuffle = True)
+        val_dataloader = DataLoader(val_dataset, batch_size = batchsize, shuffle = True)
 
     n_models = len(model.models)
     earlystopping = EarlyStopping_ensemble(patience = patience, min_delta = 0, n_models = n_models)
@@ -436,8 +477,13 @@ def train_error_ensemble(model, dataset, n_batches= 3, lr = 0.1, patience = 10, 
 
 
 
-def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True):
+def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True, batchsize = None):
 
+    """
+        if batchsize is provided, n_batches is disregarded
+    """
+    
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -462,6 +508,11 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
     
     tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True)
     val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
+    
+    #if batchsize provided disregard n_batches
+    if batchsize is not None:
+        tr_dataloader = DataLoader(train_dataset, batch_size = batchsize, shuffle = True)
+        val_dataloader = DataLoader(val_dataset, batch_size = batchsize, shuffle = True)
 
     
     earlystopping = EarlyStopping(skip_epochs = 100, patience = patience, min_delta = 0)
