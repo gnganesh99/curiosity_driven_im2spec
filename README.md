@@ -10,3 +10,6 @@ The workflow can be accessed using the jupyter notebook ['im2spec_encoded_error_
 The report related to this work is publised and is avaiable online: [Curiosity Driven Exploration to Optimize Structure-Property Learning in Microscopy](https://pubs.rsc.org/en/content/articlelanding/2025/dd/d5dd00119f)
 
 A different [repository](https://github.com/cylindrical-penguin/Curiosity-Driven-RL-for-PFM/tree/main) contains the additional methods used in the publised work.
+
+## Credits
+This uses a data analysis and deep learning package for microscopy: [atomai](https://github.com/pycroscopy/atomai).
